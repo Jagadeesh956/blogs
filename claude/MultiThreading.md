@@ -1,0 +1,1 @@
+This notes is to explain how threading works in java
