@@ -1,5 +1,5 @@
-- **==What does Major Incidents tell us about knowledge gaps ?==**
-- **==Why do incidents response or resolution time matters for production ?==**
+- ==What does Major Incidents tell us about knowledge gaps ?==
+- ==Why do incidents response or resolution time matters for production ?==**
 
    
 **A maintenance symptom kept continued resulting in huge impact to Application**
@@ -61,7 +61,7 @@ That answers why application nodes started connecting to some random server and 
 * **How did LoadBalancer face health check failure ?** 
   **Answer:-** Postgres servers including primary , near-standby and far-standby had a sudden restart in a span of few seconds which automatically recovered , but none of them available to serve health check request .
 * **Why leader switch didn't happen if primary server of Postgres Cluster went down ?**
-  **Answer:-** Patroni status check enabled with 30sec of interval to avoid split-brain  **both nodes of a DB cosidering themself as leaders at same time**  status of cluster nodes .
+  **Answer:-** Patroni status check enabled with 30sec of interval to avoid split-brain  **both nodes of a DB cosidering themself as leaders at same time** status of cluster nodes .
 
 
 The entire analysis of this issue took around 4 hours of time from various teams with multiple arguments between teams protecting themself from no issue at their end while technical glitch resides at multiple places to avoid this situation from happening again . 
