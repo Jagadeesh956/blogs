@@ -1,82 +1,93 @@
-- ==What does Major Incidents tell us about knowledge gaps ?==
-- ==Why do incidents response or resolution time matters for production ?==**
+---
+title: "Production Experience: A 4-Hour Incident and What It Taught Us"
+date: 2026-06-22
+tags:
+  - SRE
+  - PostgreSQL
+  - JVM
+  - Production
+summary: A real production incident where DB failover behavior, DNS caching, and cross-team knowledge gaps extended MTTR to 4 hours.
+---
 
-   
-**A maintenance symptom kept continued resulting in huge impact to Application**
+## Why Major Incidents Reveal Knowledge Gaps
 
-*A Java application running on multiple VMs started throwing errors as "cannot UPSERT on a read only DB" , from Postgres server.  In simple terms , an application is trying to send a DB request to a server which is not a primary that can accepts writes out of a 3 node DB cluster.* 
+Major incidents are rarely caused by one component alone. They expose:
 
-**15min later when the alerts continues  to slack with more than 10K failures at 5 min interval....!** 
+- Hidden dependencies between infrastructure layers
+- Operational blind spots across teams
+- Weaknesses in runbooks and escalation flow
+- Gaps in shared understanding of platform behavior
 
-Support team opened a bridge , page Database Operations to get the reason for sudden error , resolution needed to solve it . 
+This incident is a good example.
 
+## Incident Context
 
-DB team validates health of the cluster , confirms everything looking good and no changes at database end . Application team asks multiple questions "what causes this error", "why it is happening without any change" and "why it continues to happen" so on....
+A Java application running on multiple VMs started throwing:
 
-* Application team agrees that same errors were observed many times during primary switch , resolves automatically in sometime .  
+> `cannot UPSERT on a read-only DB`
 
-DB team confirms open connections in the secondary/remote server of the cluster which should be the reason for the error . Requested by application team , DB team tries to clear the connections on remote server which keeps piling up again ..
+In simple terms, the application was attempting writes on a PostgreSQL node that was not the active primary in a 3-node cluster.
 
-The question still remains unanswered **" Why all of a sudden application is trying to connect to remote node of the cluster , not active master "**
+Within 15 minutes, alerts crossed 10K failures in 5-minute intervals and a support bridge was opened.
 
-**1 hour later** 
-Debugging continues , more teams on to the call including LoadBalancer , Infrastructure Operations and downstreams that are impacted .... 
+## What Happened During Investigation
 
-Loadbalancer team identifies single pool member of the VIP being active since many days while the other 2 nodes are inactive . An error for health check was found even from the single active node from the loadbalancer logs , recovered after next polling . People on the call raises questions against the behaviour , slack updates goes as "Pool members of VIP down for DB clusters" impacting multiple application servers doing DB updates.
+### T+0 to T+1 hour
 
-DB team gets paged for similar bridges reporting similar DB errors that are impacts other apps and confirms BAU after sometime . No action from any team , apps are back BAU ... 
+- DB team validated cluster health and reported no active DB-side changes
+- Application team noted they had seen similar transient errors during primary switches
+- DB team observed open connections on secondary/remote servers
+- Clearing those connections did not solve the issue
 
-**An Enterprise level Issue for DB servers has been confirmed  with no root cause ** 
+Core question remained:
 
-50-100 people on call, having cross questions to different teams , validating various things but nothing really concludes.... 
+**Why was the application suddenly connecting to non-primary nodes?**
 
-**2 hours since the start of the issue ...Application is still bleeding with same errors crossing 3M Errors** 
+### T+1 to T+2 hours
 
-DB team manually reviews logs at server level , matches the timeframe when issue started to an observation stating "Postgres process shutting down" log  on master nodes at same time . Issue concluded as "something happened at server level to bring down database node" which exactly matches to when health check from LoadBalancer failed . 
+- Additional teams joined: Load Balancer, Infra Ops, downstream application owners
+- Load balancer team observed VIP pool instability and intermittent health-check failures
+- Similar incidents were reported by other applications
+- System returned to partial BAU at times, then regressed
 
-Someone from Engineering team suggests to restart an instance of impacted application to see if the failures stop from that instance .... ==**Boom, it works perfectly fine after restart**== 
+At this stage, this was treated as an enterprise-level DB incident without a clear root cause.
 
-==**..................A resolution is found ... just restart the impacted application.................**== 
+### T+2 to T+3 hours
 
+- Errors crossed 3M at application layer
+- DB logs showed `Postgres process shutting down` around incident start on master nodes
+- Engineering suggested restarting one impacted app instance
+- Restart worked immediately on that instance
 
-**3 hours from the beginning** 
+A temporary resolution was identified:
 
-Everyone takes some breath , application servers starts coming back to BAU . Leaderships gets updates as we are BAU from application end .. But , question of root cause still remains unanswered.... debugging on what caused this still continues from multiple teams, application support wants root cause from DB teams .. 
+**Restart impacted application instances**
 
-DB team brings in their SMEs onto call, many questions remains unanswered ... 
+## Key Root Cause Insights
 
-1) What happened when master node went down and came back suddenly ?
-2) Why primary switch didn't happen when an active master went down ?
-3) How application started trying to connect with secondary server while no master switch ?
-4) Why applications still trying to connect to secondary nodes even after connections cleanup .
+DB SME analysis clarified the sequence:
 
+1. When load balancer health checks failed, DNS lookups for DB VIP began round-robin behavior across cluster nodes.
+2. Application connections landed on read-only nodes, causing UPSERT failures.
+3. Even after health checks recovered, JVM processes reused existing TCP connections and did not force fresh DNS resolution.
+4. Patroni leader checks (30s interval) and LB health checks (5s interval) had a timing mismatch during transient restart windows.
 
-***The SME from DB team confirms when health check request from LoadBalancer fails , the DNS lookup for the cluster VIP goes round-robin across all the nodes of the cluster .*** 
+## Why Resolution Time Matters in Production
 
-That answers why application nodes started connecting to some random server and started throwing **"cannot UPSERT on a read only DB"**
+This issue lasted ~4 hours. A focused restart/runbook action could have reduced MTTR significantly.
 
-**Followup Questions in my mind :-** 
-* **Why application continue to throw error even after LoadBalancer health check succeded ?**
-  **Answer:-**  Application process [ JVM ] never tried to do new DNS query as the active TCP connection exists with a DB host . DNS caching eliminated new lookup on DB VIP until restarted . 
-* **How did LoadBalancer face health check failure ?** 
-  **Answer:-** Postgres servers including primary , near-standby and far-standby had a sudden restart in a span of few seconds which automatically recovered , but none of them available to serve health check request .
-* **Why leader switch didn't happen if primary server of Postgres Cluster went down ?**
-  **Answer:-** Patroni status check enabled with 30sec of interval to avoid split-brain  **both nodes of a DB cosidering themself as leaders at same time** status of cluster nodes .
+Longer incident duration caused:
 
+- Large-scale user-facing errors
+- Multi-team paging and escalation fatigue
+- Communication overhead (50-100 people on bridge)
+- Delayed root-cause convergence due to parallel assumptions
 
-The entire analysis of this issue took around 4 hours of time from various teams with multiple arguments between teams protecting themself from no issue at their end while technical glitch resides at multiple places to avoid this situation from happening again . 
+## My Technical Takeaways
 
+- **Connection reuse + DNS caching** in JVM can prolong failures after backend topology changes.
+- **Health-check interval mismatch** (Patroni vs LB) can create instability windows.
+- **Cross-team knowledge gaps** can dominate MTTR more than pure technical failure.
+- **Runbooks should include validated fast mitigations** (e.g., controlled app restart) while root cause analysis continues.
 
-**MY TECHNICAL VIEW** 
-
- * A JVM process kept connecting to the same backend server without doing active DNS lookup as an active TCP connection exists , resulted in continuous failures at application layer . 
- * Patroni status check timegap [ 30sec ] doesn't match with LoadBalancer Health Check frequency [ 5 sec ] which caused  a round robin DNS results impacting DB VIPs. 
- * Knowledge gap from various teams resulted in 4hours of MTTR which would have been less than 15min with a simple restart of impacted services . 
-   
-   
-   
-
-
-
-
-
+.
