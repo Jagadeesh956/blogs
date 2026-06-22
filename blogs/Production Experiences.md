@@ -1,16 +1,15 @@
-1) How sudden network blips impacts working applications in an Enterprise  ?
-2) What exactly does observability mean in  a critical workflow involving many services ?
-3) Cost of Human Errors in production 
-4) What does Major Incidents tell us about knowledge gaps ?
-5) Why do incidents response or resolution time matters for production ?
+
+
+1) What does Major Incidents tell us about knowledge gaps ?
+2) Why do incidents response or resolution time matters for production ?
    
 
 
-**How sudden network blips impacts working applications in an Enterprise  ?**
+**A maintenance symptom kept continued resulting in huge impact to Application**
 
 *A Java application running on multiple VMs started throwing errors as "cannot UPSERT on a read only DB" , from Postgres server.  In simple terms , an application is trying to send a DB request to a server which is not a primary that can accepts writes out of a 3 node DB cluster.* 
 
-**15min later when the alerts continues  to slack with more than 10K failures ....!** 
+**15min later when the alerts continues  to slack with more than 10K failures at 5 min interval....!** 
 
 Support team opened a bridge , page Database Operations to get the reason for sudden error , resolution needed to solve it . 
 
@@ -34,16 +33,16 @@ DB team gets paged for similar bridges reporting similar DB errors that are impa
 
 50-100 people on call, having cross questions to different teams , validating various things but nothing really concludes.... 
 
-**2 hours since the start of the issue ...Application is still bleeding with same errors crossing 3M Errors ** 
+**2 hours since the start of the issue ...Application is still bleeding with same errors crossing 3M Errors** 
 
 DB team manually reviews logs at server level , matches the timeframe when issue started to an observation stating "Postgres process shutting down" log  on master nodes at same time . Issue concluded as "something happened at server level to bring down database node" which exactly matches to when health check from LoadBalancer failed . 
 
-Someone from Engineering team suggests to restart an instance of impacted application to see if the failures stop from that instance .... **Boom, it works perfectly fine after restart** 
+Someone from Engineering team suggests to restart an instance of impacted application to see if the failures stop from that instance .... ==**Boom, it works perfectly fine after restart**== 
 
-**..................A resolution is found ... just restart the impacted application.................** 
+==**..................A resolution is found ... just restart the impacted application.................**== 
 
 
-**3 hours from the beginning ** 
+**3 hours from the beginning** 
 
 Everyone takes some breath , application servers starts coming back to BAU . Leaderships gets updates as we are BAU from application end .. But , question of root cause still remains unanswered.... debugging on what caused this still continues from multiple teams, application support wants root cause from DB teams .. 
 
@@ -65,7 +64,7 @@ That answers why application nodes started connecting to some random server and 
 * **How did LoadBalancer face health check failure ?** 
   **Answer:-** Postgres servers including primary , near-standby and far-standby had a sudden restart in a span of few seconds which automatically recovered , but none of them available to serve health check request .
 * **Why leader switch didn't happen if primary server of Postgres Cluster went down ?**
-  **Answer:-** Patroni status check enabled with 30sec of interval to avoid split-brain [ both nodes of a DB cosidering themself as leaders at same time] status of cluster nodes .
+  **Answer:-** Patroni status check enabled with 30sec of interval to avoid split-brain ==[ both nodes of a DB cosidering themself as leaders at same time]== status of cluster nodes .
 
 
 The entire analysis of this issue took around 4 hours of time from various teams with multiple arguments between teams protecting themself from no issue at their end while technical glitch resides at multiple places to avoid this situation from happening again . 
@@ -74,7 +73,11 @@ The entire analysis of this issue took around 4 hours of time from various teams
 **MY** ***TECHNICAL VIEW 
 
  * A JVM process kept connecting to the same backend server without doing active DNS lookup as an active TCP connection exists , resulted in continuous failures at application layer . 
- * Patroni status timeframe doesn't match with LoadBalancer Health Check frequency which caused  
+ * Patroni status check timegap [ 30sec ] doesn't match with LoadBalancer Health Check frequency [ 5 sec ] which caused  a round robin DNS results impacting DB VIPs. 
+ * Knowledge gap from various teams resulted in 4hours of MTTR which would have been less than 15min with a simple restart of impacted services . 
+   
+   
+   
 
 
 
