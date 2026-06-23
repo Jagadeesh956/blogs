@@ -69,12 +69,12 @@
             "state": {
               "type": "markdown",
               "state": {
-                "file": "blogs/Production Experiences.md",
+                "file": "blogs/The blind spots of a client-server architecture ..!!.md",
                 "mode": "source",
                 "source": false
               },
               "icon": "lucide-file",
-              "title": "Production Experiences"
+              "title": "The blind spots of a client-server architecture ..!!"
             }
           }
         ],
@@ -244,9 +244,11 @@
   },
   "active": "2ae50a0de937707f",
   "lastOpenFiles": [
+    "Untitled.md",
+    "blogs/The blind spots of a client-server architecture ..!!.md",
+    "blogs/Production Experiences.md",
     "blogs/java-oom.md",
     "blogs/Kubernetes Networking.md",
-    "blogs/Production Experiences.md",
     "claude/CKA vs CKAD - Deep Comparison and CKA Study Guide 1.md",
     "claude/Amazon Engineering Organization - Deep Dive 1.md",
     "Untitled",
@@ -273,8 +275,6 @@
     "blogs",
     "claude",
     "claude/Python-25days.md",
-    "claude/Work Visa Guide - Indian Software Engineers.md",
-    "claude/Welcome.md",
     "Untitled 1",
     "Java World"
   ]
